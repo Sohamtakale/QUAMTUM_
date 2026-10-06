@@ -203,7 +203,7 @@ Settled since the last review (Avik Mitra, WhatsApp):
   * OBSPOP/INIT already matched the guidance - user's choice, kept out of
     the footer. No change needed.
 
-Needs a decision - see OPEN_QUESTIONS.md:
+Needs a decision from Dr. Kale:
   * Q1 (blocking) variant A PHAD appears to have pl1/pl2 swapped, which
     would give wrong flip angles. Present in the ORIGINAL file; copied
     verbatim rather than silently corrected.

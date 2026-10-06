@@ -77,7 +77,7 @@ VARIANT_A_GATE_LIBRARY: dict[str, str] = {
 
     # Unlike every other block in this variant, pl1 is on :f2 (1H) and pl2 on
     # :f1 (13C) - the power levels appear swapped, which would give wrong flip
-    # angles. Present in the original file; copied verbatim. See OPEN_QUESTIONS.md Q1.
+    # angles. Present in the original file; copied verbatim rather than corrected.
     "PHAD": """\
 (p1 pl1 ph3):f2 (p11 pl2 ph3):f1 ; 90y-bar on 1H and 13C
 """,

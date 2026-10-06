@@ -317,7 +317,6 @@ J coupling in Hz), not `d2`.
 | `original_variant_A.txt`, `original_variant_B.txt` | The unmodified repo programs; the reference for regression tests. |
 | `preflight.py` | Static structural lint over 72 generated programs. Exits non-zero on failure. **Not** a TopSpin compile. |
 | `demo.sh` | Guided walkthrough for presenting the project. |
-| `OPEN_QUESTIONS.md` | Decisions needed from Dr. Kale before spectrometer use. |
 
 ### Parser rules
 
@@ -385,7 +384,7 @@ sides are normalized only for **trailing whitespace and consecutive blank lines*
 
 All 24 blocks (9 gates + PPS + OBSPOP + INIT, × 2 variants) are byte-identical to the
 originals. The following oddities therefore exist **in the original repo programs** and
-are reproduced faithfully rather than silently "fixed". See `OPEN_QUESTIONS.md`.
+are reproduced faithfully rather than silently "fixed".
 
 1. **Variant A `PHAD` has `pl1`/`pl2` swapped** relative to every other block in that
    variant: `(p1 pl1 ph3):f2 (p11 pl2 ph3):f1` applies the 13C power level to the 1H
@@ -405,4 +404,5 @@ are reproduced faithfully rather than silently "fixed". See `OPEN_QUESTIONS.md`.
 - No gate-level optimisation: `NOT1, NOT1` emits two 180° pulses rather than cancelling
   to identity. Intentional — the tool is a faithful assembler, not a compiler.
 - No check that the total sequence duration is sensible relative to T2.
-- Not yet executed on a spectrometer; see `OPEN_QUESTIONS.md`.
+- Not yet executed on a spectrometer: nothing has been compiled or run in TopSpin,
+  so no claim is made about on-instrument behaviour.

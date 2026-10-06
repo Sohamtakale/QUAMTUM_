@@ -12,3 +12,6 @@ __pycache__/
 my_circuit
 all9
 *.pp
+
+# Internal notes, not published
+OPEN_QUESTIONS.md
