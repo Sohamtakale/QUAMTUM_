@@ -28,18 +28,118 @@ directly in sequence, and a repeated gate is simply repeated.
 
 ---
 
-## Requirements
+## Quick start
 
-Python 3.10+ (uses `X | None` type syntax). No third-party packages for the generator
-itself; `pytest` only for the test suite.
+```bash
+git clone https://github.com/Sohamtakale/QUAMTUM_.git
+cd QUAMTUM_
 
-> **Note on this machine:** `pytest` is installed only under
-> `/opt/anaconda3/bin/python3.13`. The default `python3` (3.14) does **not** have it,
-> so `python3 -m pytest` fails with *"No module named pytest"*. Run the suite with:
->
-> ```
-> /opt/anaconda3/bin/python3.13 -m pytest -q
-> ```
+python3 generator.py "NOT1, HAD, CNOT12" --readout OBSPOP -o my_circuit
+cat my_circuit
+```
+
+That writes a complete Bruker pulse program running those three gates, in that order,
+with state preparation and an observation pulse.
+
+### Requirements
+
+**Python 3.10+** (uses `X | None` type syntax). **No third-party packages are needed to
+generate pulse programs** — only the standard library.
+
+`pytest` is required for the test suite:
+
+```bash
+pip install pytest
+pytest -q
+```
+
+<details>
+<summary>If <code>pytest</code> is not on your default Python</summary>
+
+Use whichever interpreter has it, e.g. an Anaconda install:
+
+```bash
+/opt/anaconda3/bin/python3.13 -m pytest -q
+```
+
+`python3 -m pytest` failing with *"No module named pytest"* just means the default
+interpreter lacks it; the generator itself is unaffected.
+</details>
+
+---
+
+## Example output
+
+<details>
+<summary><code>python3 generator.py "NOT1, HAD, CNOT12" --readout OBSPOP -o my_circuit</code></summary>
+
+```
+#include <Avance.incl>
+#include <Grad.incl>
+
+"acqt0=-p1*2/3.1416"
+"d2=1/(4*cnst1)" ; 1/4J free evolution
+
+
+1 ze
+2 30m
+  d1
+
+;;----------PPS--Based on PRA 85 022109 (2012)-------------------------
+(p2 pl2 ph0):f2  ;15 deg x-pulse on 1H
+d2
+d2
+(p3 pl2 ph3):f2  ;75 deg ybar-pulse on 1H
+
+100u UNBLKGRAD ; gradient
+p31:gp2
+100u BLKGRAD
+(p4 pl2 ph3):f2 ;180 deg y-pulse on 1h
+(p1 pl2 ph1):f2 (p11 pl1 ph1):f1 ; 90y on 1H and 13C
+(p4 pl2 ph0):f2 (p14 pl1 ph0):f1 ; 180x on 1H and 13C
+;cnot12 control bit 1
+; quant-ph/9801027 - Jones and Mosca (eqn 14)
+; H is spin I and C is spin S
+(p11 pl1 ph1):f1 ; 90Sy (13C)
+d2
+d2
+(p1 pl2 ph1):f2 ; 90Iy (1H)
+(p1 pl2 ph0):f2 ; 90Ix (1H)
+(p1 pl2 ph3):f2 (p11 pl1 ph3):f1 ;90Yb on spin I,S (1H, 13C)
+(p11 pl1 ph0):f1 ; 90Sx (13C)
+  100u UNBLKGRAD ; gradient
+  p31:gp3
+  100u BLKGRAD
+(p11 pl1 ph1):f1 ; observation 90 pulse
+
+;; Read out
+  go=2 ph31
+  30m mc #0 to 2 F0(zd)
+exit
+
+
+ph0=0
+ph1=1
+ph2 =2
+ph3 =3
+ph31=0
+
+
+
+;pl1 : f1 channel - power level for pulse (default)
+;p1 : f1 channel -  high power pulse
+;d1 : relaxation delay; 1-5 * T1
+;ns: 1 * n, total number of scans: NS * TD0
+
+
+
+;$Id:$
+```
+
+The three gate blocks appear between the PPS block and the observation pulse, in the
+order given. Reorder the input and the blocks move with it; repeat a gate and the block
+repeats.
+</details>
 
 ---
 
@@ -206,8 +306,8 @@ suite, and current status.
 ## Testing
 
 ```
-/opt/anaconda3/bin/python3.13 -m pytest -q      # 147 passed
-python3 preflight.py                            # 72/72 structural checks
+pytest -q                 # 147 passed
+python3 preflight.py      # 72/72 structural checks
 ```
 
 Parser tests cover each gate alone, multiple gates, repeats, reorderings, a 200-gate
