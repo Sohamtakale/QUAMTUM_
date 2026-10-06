@@ -53,6 +53,9 @@ pip install pytest
 pytest -q
 ```
 
+Run `pytest` from the repository root — `pyproject.toml` puts `src/` on the import
+path, so the suite needs no `PYTHONPATH` or installation step.
+
 <details>
 <summary>If <code>pytest</code> is not on your default Python</summary>
 
@@ -346,6 +349,7 @@ tests/
   reference/          the unmodified original programs
 out/                  batch output (gitignored)
 demo.sh               guided walkthrough
+pyproject.toml        pytest config (puts src/ on the import path)
 ```
 
 **The pulse code lives in `lib/`, not in Python.** Each `.txt` file holds exactly the
@@ -384,8 +388,8 @@ suite, and current status.
 ## Testing
 
 ```
-pytest -q                 # 160 passed
-python3 src/preflight.py      # 72/72 structural checks
+pytest -q                    # 160 passed
+python3 src/preflight.py     # 72/72 structural checks
 ```
 
 Parser tests cover each gate alone, multiple gates, repeats, reorderings, a 200-gate
