@@ -1,0 +1,4 @@
+  100u UNBLKGRAD ; gradient
+   p31:gp3
+  1m BLKGRAD
+(p1 pl1 ph1):f1 ; observation 90 pulse

@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+# src/ holds the modules; tests/ imports them directly. This replaces a
+# sys.path hack in conftest.py and is understood by editors and type
+# checkers as well as pytest.
+pythonpath = ["src"]
+testpaths = ["tests"]

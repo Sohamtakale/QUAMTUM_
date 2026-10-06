@@ -1,0 +1,10 @@
+#include <Avance.incl>
+#include <Grad.incl>
+
+"acqt0=-p1*2/3.1416"
+"d2=1/(4*cnst1)" ; 1/4J free evolution
+
+
+1 ze
+2 30m
+  d1

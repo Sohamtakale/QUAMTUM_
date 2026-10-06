@@ -1,0 +1,9 @@
+;;----------PPS--Based on PRA 85 022109 (2012)-------------------------
+(p2 pl2 ph0):f2  ;15 deg x-pulse on 1H
+d2
+d2
+(p3 pl2 ph3):f2  ;75 deg ybar-pulse on 1H
+
+100u UNBLKGRAD ; gradient
+p31:gp2
+100u BLKGRAD

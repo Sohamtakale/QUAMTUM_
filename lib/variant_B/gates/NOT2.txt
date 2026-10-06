@@ -1,0 +1,1 @@
+(p14 pl2 ph1):f2 ;180 deg y-pulse on 13C

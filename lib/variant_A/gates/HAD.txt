@@ -1,0 +1,2 @@
+(p1 pl2 ph1):f2 (p11 pl1 ph1):f1 ; 90y on 1H and 13C
+(p4 pl2 ph0):f2 (p14 pl1 ph0):f1 ; 180x on 1H and 13C

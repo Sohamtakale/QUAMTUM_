@@ -15,3 +15,7 @@ all9
 
 # Internal notes, not published
 OPEN_QUESTIONS.md
+
+# Batch output
+out/
+output_usr/

@@ -1,0 +1,48 @@
+// Gate sequences compiled by:  python3 src/generator.py --batch tests/sequences.txt
+//
+// One sequence per line. Blank lines and // comments are ignored.
+// An outer [...] is optional. Lines that fail to parse are reported with
+// their line number and do not stop the run.
+
+// --- each gate on its own ---
+[NOT1]
+[NOT2]
+[NOT12]
+[HAD]
+[PHAD]
+[CNOT12]
+[CNOT21]
+[CNOTB12]
+[CNOTB21]
+
+// --- order matters: same gates, different circuits ---
+[NOT1, CNOT12]
+[CNOT12, NOT1]
+
+// --- repeated gates, which the original #ifdef programs cannot express ---
+[NOT1, NOT1]
+[CNOT12, NOT1, CNOT12]
+[HAD, HAD, HAD, HAD]
+
+// --- mixed sequences ---
+[NOT1, CNOT12, HAD, NOT2, CNOTB21, NOT1]
+[HAD, PHAD, NOT12, CNOT21]
+[NOT2, CNOTB12, HAD, NOT1]
+[CNOT12, CNOT21, CNOTB12, CNOTB21]
+[PHAD, NOT1, NOT2, HAD, NOT12]
+
+// --- input forms that are accepted ---
+not1, had, cnot12
+NOT 1, CNOT 12
+NOT1, HAD, CNOT12
+
+// --- these are rejected, each with its position reported ---
+[XYZ]                   // unknown gate
+[NOT1, XYZ]             // one good, one unknown
+[CX12]                  // close enough to suggest CNOT12
+[NOT1, , CNOT12]        // empty entry from a doubled comma
+[NOT1 HAD]              // missing comma
+[1, 3, 5]               // numbers instead of names
+[PPS]                   // reserved, not a sequence gate
+[OBSPOP]                // reserved, chosen with --readout instead
+[]                      // empty

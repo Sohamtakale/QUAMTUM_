@@ -1,0 +1,22 @@
+
+;; Read out
+  go=2 ph31
+  30m mc #0 to 2 F0(zd)
+exit
+
+
+ph0=0
+ph1=1
+ph2 =2
+ph3 =3
+ph31=0
+
+
+;pl1 : f1 channel - power level for pulse (default)
+;p1 : f1 channel -  high power pulse
+;d1 : relaxation delay; 1-5 * T1
+;ns: 1 * n, total number of scans: NS * TD0
+
+
+
+;$Id:$

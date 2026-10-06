@@ -43,6 +43,8 @@ from generator import (
     PROVENANCE_MARKER,
 )
 
+GENERATOR = Path(__file__).resolve().parent.parent / "src" / "generator.py"
+
 ALL_GATES_A = list(VARIANT_A_GATE_LIBRARY.keys())
 ALL_GATES_B = list(VARIANT_B_GATE_LIBRARY.keys())
 
@@ -217,7 +219,7 @@ def test_prep_is_on_by_default(variant: str, prep_block: str):
 def test_cli_emits_prep_without_any_flag(tmp_path: Path):
     out_file = tmp_path / "default.txt"
     res = subprocess.run(
-        [sys.executable, "generator.py", "HAD, CNOT12", "-o", str(out_file)],
+        [sys.executable, str(GENERATOR), "HAD, CNOT12", "-o", str(out_file)],
         capture_output=True, text=True,
     )
     assert res.returncode == 0
@@ -227,7 +229,7 @@ def test_cli_emits_prep_without_any_flag(tmp_path: Path):
 def test_cli_no_prep_flag_suppresses_prep(tmp_path: Path):
     out_file = tmp_path / "noprep.txt"
     res = subprocess.run(
-        [sys.executable, "generator.py", "HAD, CNOT12", "--no-prep", "-o", str(out_file)],
+        [sys.executable, str(GENERATOR), "HAD, CNOT12", "--no-prep", "-o", str(out_file)],
         capture_output=True, text=True,
     )
     assert res.returncode == 0
@@ -321,7 +323,7 @@ def test_cli_bad_gate_exits_code_1_and_creates_no_file(tmp_path: Path):
     out_file = tmp_path / "should_not_exist.txt"
     cmd = [
         sys.executable,
-        "generator.py",
+        str(GENERATOR),
         "NOT1, BADGATE, HAD",
         "-o",
         str(out_file),
@@ -339,7 +341,7 @@ def test_cli_bad_gate_does_not_overwrite_existing_file(tmp_path: Path):
 
     cmd = [
         sys.executable,
-        "generator.py",
+        str(GENERATOR),
         "NOT1, UNKNOWN_GATE",
         "-o",
         str(existing),
@@ -353,7 +355,7 @@ def test_cli_success(tmp_path: Path):
     out_file = tmp_path / "valid_prog.txt"
     cmd = [
         sys.executable,
-        "generator.py",
+        str(GENERATOR),
         "NOT1, HAD, CNOT12",
         "--variant",
         "A",
@@ -426,13 +428,13 @@ def test_cli_failure_removes_stale_output_it_wrote(tmp_path: Path):
     """
     out_file = tmp_path / "circuit.txt"
     ok = subprocess.run(
-        [sys.executable, "generator.py", "NOT1, HAD", "-o", str(out_file)],
+        [sys.executable, str(GENERATOR), "NOT1, HAD", "-o", str(out_file)],
         capture_output=True, text=True,
     )
     assert ok.returncode == 0 and out_file.exists()
 
     bad = subprocess.run(
-        [sys.executable, "generator.py", "NOT1, BADGATE", "-o", str(out_file)],
+        [sys.executable, str(GENERATOR), "NOT1, BADGATE", "-o", str(out_file)],
         capture_output=True, text=True,
     )
     assert bad.returncode == 1
@@ -447,7 +449,7 @@ def test_cli_failure_never_deletes_a_file_it_did_not_write(tmp_path: Path):
     victim.write_text(content, encoding="utf-8")
 
     res = subprocess.run(
-        [sys.executable, "generator.py", "NOT1, BADGATE", "-o", str(victim)],
+        [sys.executable, str(GENERATOR), "NOT1, BADGATE", "-o", str(victim)],
         capture_output=True, text=True,
     )
     assert res.returncode == 1
@@ -458,13 +460,102 @@ def test_cli_failure_never_deletes_a_file_it_did_not_write(tmp_path: Path):
 def test_cli_failure_with_no_existing_file_is_quiet(tmp_path: Path):
     out_file = tmp_path / "absent.txt"
     res = subprocess.run(
-        [sys.executable, "generator.py", "BADGATE", "-o", str(out_file)],
+        [sys.executable, str(GENERATOR), "BADGATE", "-o", str(out_file)],
         capture_output=True, text=True,
     )
     assert res.returncode == 1
     assert not out_file.exists()
     assert "Removed stale" not in res.stderr
     assert "not written by this tool" not in res.stderr
+
+
+# ===========================================================================
+# 10c. Batch mode
+# ===========================================================================
+
+def _write_batch(tmp_path: Path, body: str) -> Path:
+    f = tmp_path / "seqs.txt"
+    f.write_text(body, encoding="utf-8")
+    return f
+
+
+def test_batch_compiles_every_sequence(tmp_path: Path):
+    batch = _write_batch(tmp_path, "[NOT1]\n[HAD, CNOT12]\nNOT2, PHAD\n")
+    outdir = tmp_path / "out"
+    res = subprocess.run(
+        [sys.executable, str(GENERATOR), "--batch", str(batch), "--outdir", str(outdir)],
+        capture_output=True, text=True,
+    )
+    assert res.returncode == 0, res.stderr
+    names = sorted(p.name for p in outdir.iterdir())
+    assert names == ["HAD_CNOT12", "NOT1", "NOT2_PHAD"]
+    assert "3/3 sequences compiled" in res.stdout
+
+
+def test_batch_skips_comments_and_blank_lines(tmp_path: Path):
+    batch = _write_batch(
+        tmp_path,
+        "// a comment\n\n[NOT1]   // trailing comment\n\n   \n[HAD]\n",
+    )
+    outdir = tmp_path / "out"
+    res = subprocess.run(
+        [sys.executable, str(GENERATOR), "--batch", str(batch), "--outdir", str(outdir)],
+        capture_output=True, text=True,
+    )
+    assert res.returncode == 0, res.stderr
+    assert sorted(p.name for p in outdir.iterdir()) == ["HAD", "NOT1"]
+
+
+def test_batch_reports_line_numbers_and_continues(tmp_path: Path):
+    batch = _write_batch(tmp_path, "[NOT1]\n[XYZ]\n[HAD]\n")
+    outdir = tmp_path / "out"
+    res = subprocess.run(
+        [sys.executable, str(GENERATOR), "--batch", str(batch), "--outdir", str(outdir)],
+        capture_output=True, text=True,
+    )
+    assert res.returncode == 1
+    assert "line 2" in res.stderr
+    assert "unknown gate 'XYZ'" in res.stderr
+    # the bad line must not stop the good ones
+    assert sorted(p.name for p in outdir.iterdir()) == ["HAD", "NOT1"]
+
+
+def test_batch_deduplicates_filenames(tmp_path: Path):
+    batch = _write_batch(tmp_path, "[NOT1]\n[not 1]\n[NOT1]\n")
+    outdir = tmp_path / "out"
+    subprocess.run(
+        [sys.executable, str(GENERATOR), "--batch", str(batch), "--outdir", str(outdir)],
+        capture_output=True, text=True,
+    )
+    assert sorted(p.name for p in outdir.iterdir()) == ["NOT1", "NOT1_2", "NOT1_3"]
+
+
+def test_batch_output_matches_single_sequence_output(tmp_path: Path):
+    """Batch and -o must produce identical programs for the same sequence."""
+    batch = _write_batch(tmp_path, "[HAD, CNOT12]\n")
+    outdir = tmp_path / "out"
+    single = tmp_path / "single"
+    subprocess.run(
+        [sys.executable, str(GENERATOR), "--batch", str(batch),
+         "--outdir", str(outdir), "--variant", "B", "--readout", "INIT"],
+        capture_output=True, text=True,
+    )
+    subprocess.run(
+        [sys.executable, str(GENERATOR), "HAD, CNOT12", "-o", str(single),
+         "--variant", "B", "--readout", "INIT"],
+        capture_output=True, text=True,
+    )
+    assert (outdir / "HAD_CNOT12").read_text() == single.read_text()
+
+
+def test_batch_rejects_combination_with_single_mode(tmp_path: Path):
+    batch = _write_batch(tmp_path, "[NOT1]\n")
+    res = subprocess.run(
+        [sys.executable, str(GENERATOR), "NOT1", "--batch", str(batch)],
+        capture_output=True, text=True,
+    )
+    assert res.returncode != 0
+    assert "cannot be combined" in res.stderr
 
 
 # ===========================================================================
@@ -539,7 +630,7 @@ def process_original_pulse_program(path: str | Path, active_defines: set[str]) -
     (True, ["NOT1", "NOT2"], None),
 ])
 def test_regression_against_original(variant: str, prep: bool, gates: list[str], readout: str | None):
-    orig_path = Path(__file__).parent / f"original_variant_{variant}.txt"
+    orig_path = Path(__file__).parent / "reference" / f"original_variant_{variant}.txt"
     assert orig_path.exists(), f"Original file {orig_path} must exist"
 
     active_macros = set(gates)

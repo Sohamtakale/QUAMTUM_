@@ -13,6 +13,7 @@ Public API
 import argparse
 import os
 import sys
+from pathlib import Path
 
 from gate_library import (
     VARIANT_A_HEADER,
@@ -234,6 +235,7 @@ def build_cli_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "gates",
+        nargs="?",
         help="Comma-separated gate sequence (e.g. 'NOT1, HAD, CNOT12')",
     )
     parser.add_argument(
@@ -268,10 +270,99 @@ def build_cli_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-o",
         "--output",
-        required=True,
-        help="Output file path.",
+        help="Output file path (single-sequence mode).",
+    )
+    parser.add_argument(
+        "--batch",
+        metavar="FILE",
+        help="Compile every sequence listed in FILE, one per line. "
+             "Blank lines and '//' comments are ignored; an optional outer "
+             "[...] is accepted.",
+    )
+    parser.add_argument(
+        "--outdir",
+        default="out",
+        help="Directory for --batch output. Default: 'out'.",
     )
     return parser
+
+
+def read_sequence_file(path: str) -> list[tuple[int, str]]:
+    """
+    Read a batch file, returning (line number, sequence text) for each entry.
+
+    Blank lines and '//' comments are skipped, and one optional outer [...]
+    is left for the parser to unwrap.
+    """
+    entries: list[tuple[int, str]] = []
+    with open(path, "r", encoding="utf-8") as f:
+        for lineno, raw in enumerate(f, start=1):
+            text = raw.split("//")[0].strip()
+            if text:
+                entries.append((lineno, text))
+    return entries
+
+
+def sequence_filename(gates: list[str], used: set[str], limit: int = 40) -> str:
+    """
+    Build an output filename from the gate sequence, de-duplicated.
+
+    Truncation is safe here: the provenance header inside each file records
+    the full sequence, so a shortened name is never ambiguous.
+    """
+    base = "_".join(gates)[:limit]
+    name = base
+    n = 1
+    while name.lower() in used:
+        n += 1
+        suffix = f"_{n}"
+        name = base[: limit - len(suffix)] + suffix
+    used.add(name.lower())
+    return name
+
+
+def run_batch(args) -> int:
+    """Compile every sequence in args.batch. Returns a process exit code."""
+    try:
+        entries = read_sequence_file(args.batch)
+    except OSError as e:
+        print(f"Error: cannot read {args.batch}: {e}", file=sys.stderr)
+        return 1
+
+    if not entries:
+        print(f"Error: no sequences found in {args.batch}", file=sys.stderr)
+        return 1
+
+    outdir = Path(args.outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    used: set[str] = set()
+    failures = 0
+
+    for lineno, text in entries:
+        try:
+            gate_list = parse_gate_sequence(text)
+            program = generate_pulse_program(
+                gates=gate_list,
+                variant=args.variant,
+                prep=args.prep,
+                readout=args.readout,
+            )
+            name = sequence_filename(gate_list, used)
+            write_pulse_program(program, str(outdir / name))
+            print(f"line {lineno}: {text}  ->  {name}")
+        except GateParseError as e:
+            failures += 1
+            print(f"line {lineno}: {text}  ->  ERROR", file=sys.stderr)
+            for err in e.errors:
+                print(f"    {err}", file=sys.stderr)
+        except ValueError as e:
+            failures += 1
+            print(f"line {lineno}: {text}  ->  ERROR: {e}", file=sys.stderr)
+
+    total = len(entries)
+    print(f"\n{total - failures}/{total} sequences compiled into {outdir}/")
+    return 1 if failures else 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -280,6 +371,16 @@ def main(argv: list[str] | None = None) -> int:
     """
     parser = build_cli_parser()
     args = parser.parse_args(argv)
+
+    if args.batch:
+        if args.gates or args.output:
+            parser.error("--batch cannot be combined with a gate sequence or -o")
+        return run_batch(args)
+
+    if not args.gates:
+        parser.error("a gate sequence is required (or use --batch FILE)")
+    if not args.output:
+        parser.error("-o/--output is required")
 
     try:
         gate_list = parse_gate_sequence(args.gates)

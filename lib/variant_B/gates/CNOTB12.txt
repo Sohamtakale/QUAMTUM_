@@ -1,0 +1,10 @@
+;cnot12 with control-bit state 0
+; quant-ph/9801027 - Jones and Mosca (eqn 14)
+; H is spin I and C is spin S
+(p11 pl2 ph1):f2 ; 90Sy (13C)
+d2
+d2
+(p1 pl1 ph1):f1 ; 90Iy (1H)
+(p1 pl1 ph0):f1 ; 90Ix (1H)
+(p1 pl1 ph3):f1 (p11 pl2 ph3):f2 ;90Yb on spin I,S (1H, 13C)
+(p11 pl2 ph2):f2 ; 90Sxb (1H)

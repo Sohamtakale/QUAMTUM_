@@ -76,7 +76,7 @@ EOF
 pause
 
 step "2. Generate a program from a gate list"
-run "$PY generator.py 'NOT1, HAD, CNOT12' --variant A --readout OBSPOP -o $OUT/demo1"
+run "$PY src/generator.py 'NOT1, HAD, CNOT12' --variant A --readout OBSPOP -o $OUT/demo1"
 echo
 echo "Note: PPS state preparation is emitted by default - no flag needed."
 echo
@@ -88,8 +88,8 @@ pause
 step "3. Order is the user's, not the file's"
 echo "Same two gates, opposite order - note which pulse block comes first."
 echo
-run "$PY generator.py 'NOT1, HAD' -o $OUT/order1"
-run "$PY generator.py 'HAD, NOT1' -o $OUT/order2"
+run "$PY src/generator.py 'NOT1, HAD' -o $OUT/order1"
+run "$PY src/generator.py 'HAD, NOT1' -o $OUT/order2"
 echo
 echo "Diff of the two generated programs:"
 echo
@@ -101,7 +101,7 @@ pause
 step "4. Repeated gates"
 echo "The #ifdef scheme can emit each gate at most once. We can repeat freely:"
 echo
-run "$PY generator.py 'NOT1, NOT1, NOT1' -o $OUT/rep"
+run "$PY src/generator.py 'NOT1, NOT1, NOT1' -o $OUT/rep"
 echo
 echo -n "    180 deg 1H pulses emitted: "
 echo "${G}$(grep -c '180 deg y-pulse on 1h' "$OUT/rep")${N}"
@@ -112,8 +112,8 @@ echo "The variants differ only in channel assignment."
 echo "  Variant A:  1H -> f2/pl2,  13C -> f1/pl1"
 echo "  Variant B:  1H -> f1/pl1,  13C -> f2/pl2"
 echo
-run "$PY generator.py 'NOT1' --variant A -o $OUT/va"
-run "$PY generator.py 'NOT1' --variant B -o $OUT/vb"
+run "$PY src/generator.py 'NOT1' --variant A -o $OUT/va"
+run "$PY src/generator.py 'NOT1' --variant B -o $OUT/vb"
 echo
 echo "The NOT1 (1H) pulse line in each:"
 echo
@@ -126,8 +126,8 @@ echo "All problems are reported at once, with positions and suggestions."
 echo "Nothing is written and the exit code is 1."
 echo
 for bad in "CX12, FOO" "NOT1 HAD" "not1,,had" "PPS" "1, 3, 5"; do
-    echo "${B}\$ $PY generator.py '$bad' -o $OUT/never${N}"
-    msg=$("$PY" generator.py "$bad" -o "$OUT/never" 2>&1); rc=$?
+    echo "${B}\$ $PY src/generator.py '$bad' -o $OUT/never${N}"
+    msg=$("$PY" src/generator.py "$bad" -o "$OUT/never" 2>&1); rc=$?
     printf '%s\n' "$msg" | sed 's/^/    /'
     echo "    ${B}exit code: $rc${N}"
     echo
@@ -141,18 +141,37 @@ echo
 echo "A failed run also clears a stale file left by an EARLIER run, so a"
 echo "rejected input can never leave a valid-looking program behind:"
 echo
-run "$PY generator.py 'NOT1, HAD' -o $OUT/circuit"
+run "$PY src/generator.py 'NOT1, HAD' -o $OUT/circuit"
 echo "    -> wrote $(wc -l < "$OUT/circuit" | tr -d ' ') lines"
-echo "${B}\$ $PY generator.py 'NOT1, CN' -o $OUT/circuit${N}"
-"$PY" generator.py 'NOT1, CN' -o "$OUT/circuit" 2>&1 | sed 's/^/    /'
+echo "${B}\$ $PY src/generator.py 'NOT1, CN' -o $OUT/circuit${N}"
+"$PY" src/generator.py 'NOT1, CN' -o "$OUT/circuit" 2>&1 | sed 's/^/    /'
 echo "    file still present: ${G}$([ -e "$OUT/circuit" ] && echo yes || echo no)${N}"
 echo
 echo "But a file this tool did NOT write is never touched:"
 echo
 printf 'IMPORTANT DATA\n' > "$OUT/thesis.txt"
-echo "${B}\$ $PY generator.py 'NOT1, CN' -o $OUT/thesis.txt${N}"
-"$PY" generator.py 'NOT1, CN' -o "$OUT/thesis.txt" 2>&1 | sed 's/^/    /'
+echo "${B}\$ $PY src/generator.py 'NOT1, CN' -o $OUT/thesis.txt${N}"
+"$PY" src/generator.py 'NOT1, CN' -o "$OUT/thesis.txt" 2>&1 | sed 's/^/    /'
 echo "    contents: ${G}$(cat "$OUT/thesis.txt")${N}"
+pause
+
+step "6b. Batch mode"
+echo "A whole set of circuits in one run. Blank lines and // comments are"
+echo "ignored; a bad line is reported and does not stop the rest."
+echo
+cat > "$OUT/seqs.txt" <<'EOF'
+// a few circuits
+[NOT1, CNOT12]
+[CNOT12, NOT1]
+[HAD, HAD]
+[XYZ]            // deliberately wrong
+EOF
+echo "    $OUT/seqs.txt:"
+sed 's/^/        /' "$OUT/seqs.txt"
+echo
+run "$PY src/generator.py --batch $OUT/seqs.txt --outdir $OUT/batch --readout OBSPOP 2>&1"
+echo
+echo "    files written: ${G}$(ls "$OUT/batch" | tr '\n' ' ')${N}"
 pause
 
 step "7. Forgiving input"
@@ -188,7 +207,7 @@ pause
 step "10. Status and what is next"
 cat <<'EOF'
 Done and verified locally:
-  * 154 tests passing (69 parser, 85 generator)
+  * 160 tests passing (69 parser, 91 generator)
   * all 24 pulse blocks byte-identical to the original programs
   * 72 generated programs pass static structural checks
 
