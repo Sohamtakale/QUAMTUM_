@@ -1,0 +1,264 @@
+# Arbitrary Gate-Sequence Pulse Program Generator
+
+Just-in-time generation of Bruker NMR pulse programs from an arbitrary quantum gate
+sequence, for the Quantuper two-qubit system (**1H** = qubit 1, **13C** = qubit 2).
+
+You give it an ordered list of gate names; it emits a complete, ready-to-load Bruker
+pulse program that runs those gates in exactly that order.
+
+```
+python3 generator.py "NOT1, HAD, CNOT12" --variant A --readout OBSPOP -o my_pulse_program
+```
+
+**Team:** Kanishka Patil, Soham Takale, Anish Apparaju, Ishita Kale · **Guide:** Dr. Preeti Kale
+
+---
+
+## Why this exists
+
+The two pulse programs in the original repo are each a single fixed file in which
+`#define` flags switch gate blocks on or off. That has two hard limits:
+
+- the gate order is fixed by the **layout of the file**, not by the user, and
+- each gate can run only **once**.
+
+Running a different circuit meant hand-editing the pulse program. This tool removes
+that step. The `#ifdef` mechanism is gone from the output: gate blocks are written
+directly in sequence, and a repeated gate is simply repeated.
+
+---
+
+## Requirements
+
+Python 3.10+ (uses `X | None` type syntax). No third-party packages for the generator
+itself; `pytest` only for the test suite.
+
+> **Note on this machine:** `pytest` is installed only under
+> `/opt/anaconda3/bin/python3.13`. The default `python3` (3.14) does **not** have it,
+> so `python3 -m pytest` fails with *"No module named pytest"*. Run the suite with:
+>
+> ```
+> /opt/anaconda3/bin/python3.13 -m pytest -q
+> ```
+
+---
+
+## Usage
+
+```
+python3 generator.py "<gate sequence>" -o <output file> [options]
+```
+
+| Option | Values | Default | Meaning |
+|---|---|---|---|
+| `--variant`, `-v` | `A`, `B` (case-insensitive) | `A` | Hardware channel mapping |
+| `--no-prep` | flag | *PPS on* | Omit the PPS block. Calibration/debugging only — see below |
+| `--readout`, `-r` | `OBSPOP`, `INIT` | none | Append an observation 90° pulse block |
+| `-o`, `--output` | path | *required* | Output file |
+
+The gate sequence is **comma-separated**. Lowercase is fine, and a space between the
+name and its qubit digits is fine, so `not 1, cnot 12` parses as `NOT1, CNOT12`.
+One optional outer `{}` or `[]` is stripped, so `{NOT1, HAD}` also works.
+
+### Why PPS is on by default
+
+The PPS state-preparation block is emitted **unless** you pass `--no-prep`. Per
+guidance from Avik Mitra, PPS is the starting point of every quantum algorithm on this
+system, so it belongs in the preamble rather than being opt-in. Omitting it does not
+fail loudly — it silently produces a circuit that runs from thermal equilibrium instead
+of a pseudo-pure state, which is the wrong experiment. `--no-prep` exists for pulse
+calibration and debugging only. `--prep` is still accepted as an explicit no-op so
+older commands keep working.
+
+On any error the tool prints every problem to stderr, exits **1**, and creates or
+overwrites **nothing**.
+
+```
+$ python3 generator.py "CX12, FOO" -o out
+Position 1: unknown gate 'CX12' - did you mean 'CNOT12'?
+Position 2: unknown gate 'FOO'
+$ echo $?
+1
+```
+
+---
+
+## Supported gates (9)
+
+| Gate | Action |
+|---|---|
+| `NOT1` | 180° pulse on 1H |
+| `NOT2` | 180° pulse on 13C |
+| `NOT12` | simultaneous 180° pulses on both |
+| `HAD` | 90°y then 180°x, simultaneously on both spins |
+| `PHAD` | 90° y-bar pulse on both spins |
+| `CNOT12` | CNOT, control 1H, target 13C, control state 1 |
+| `CNOT21` | CNOT, control 13C, target 1H, control state 1 |
+| `CNOTB12` | `CNOT12` for control state 0 (final pulse phase `ph2`) |
+| `CNOTB21` | `CNOT21` for control state 0 |
+
+CNOT constructions follow Jones & Mosca, [quant-ph/9801027](https://arxiv.org/abs/quant-ph/9801027) eq. 14.
+PPS follows PRA **85** 022109 (2012).
+
+### Not gates — options, not sequence entries
+
+`PPS`, `OBSPOP` and `INIT` are **not** gates. They are written once, at a fixed
+position, and are controlled by `--no-prep` / `--readout`. Using any of them (or
+`EQSUP`) inside the sequence is rejected:
+
+```
+Position 1: 'PPS' is not a gate and cannot be used in a sequence
+```
+
+---
+
+## Hardware variants
+
+The two original programs differ only in channel assignment, so both are kept in full
+rather than being collapsed into one template — this preserves every quirk of the
+sources verbatim.
+
+| | Variant A (default) | Variant B |
+|---|---|---|
+| 1H | `f2` / `pl2` | `f1` / `pl1` |
+| 13C | `f1` / `pl1` | `f2` / `pl2` |
+| PPS gradient recovery | `100u BLKGRAD` | `1000u BLKGRAD` |
+| OBSPOP gradient recovery | `100u BLKGRAD` | `1m BLKGRAD` |
+| Observation pulse | 13C (`p11` on `f1`) | 1H (`p1` on `f1`) |
+
+---
+
+## Output structure
+
+Assembled strictly in this order, with blocks pasted **verbatim** — no edits, no
+reordering, no deduplication:
+
+```
+HEADER                  includes, acqt0, d2 definition, "1 ze", "2 30m", d1
+(blank line)
+PPS                     always, unless --no-prep
+gate block              in input order
+gate block              ...
+READOUT                 only with --readout
+FOOTER                  go=2 ph31, mc loop, exit, phase table, parameter comments
+```
+
+### Parameters that must exist in the TopSpin parameter set
+
+The program references these but does not define them. They must be set in the
+dataset / `getprosol` before running:
+
+```
+p1  p2  p3  p4  p11  p14  p31        pulse lengths
+pl1  pl2                             power levels
+d1  d2  cnst1                        relaxation delay, 1/4J delay, J coupling
+gp2  gp3                             gradient programs
+```
+
+`d2` is computed by the program itself as `d2 = 1/(4*cnst1)`, so set **`cnst1`** (the
+J coupling in Hz), not `d2`.
+
+---
+
+## Architecture
+
+| File | Role |
+|---|---|
+| `gate_library.py` | Pure data. Per variant: `HEADER`, `PREP`, `GATE_LIBRARY` (9 blocks), `READOUT_PULSE`, `FOOTER`. Every pulse line copied verbatim from the originals. Nothing is parsed or generated here. |
+| `gate_parser.py` | `parse_gate_sequence(text)` → validated list of gate names, or raises `GateParseError`. |
+| `generator.py` | `generate_pulse_program(...)` assembles the program; `write_pulse_program(...)` writes it; CLI entry point. |
+| `test_parser.py` | 69 parser tests. |
+| `test_generator.py` | 78 generator tests, including regression against the originals. |
+| `original_variant_A.txt`, `original_variant_B.txt` | The unmodified repo programs; the reference for regression tests. |
+| `preflight.py` | Static structural lint over 72 generated programs. Exits non-zero on failure. **Not** a TopSpin compile. |
+| `demo.sh` | Guided walkthrough for presenting the project. |
+| `try_parser.py` | Small manual demo of parser error messages. |
+| `OPEN_QUESTIONS.md` | Decisions needed from Dr. Kale before spectrometer use. |
+
+### Parser rules
+
+- Empty or whitespace-only input is an error.
+- One optional outer `{}` or `[]` is removed.
+- Split on **commas only** — never on whitespace. This is deliberate: splitting on
+  spaces would make `NOT 1 2` ambiguous between `NOT1, 2` and `NOT12`.
+- Each entry must be letters optionally followed by digits (`^[A-Za-z]+(\s*\d+)?$`).
+- Rejected with targeted hints: empty entries (`extra comma?`), space-separated gates
+  (`missing comma between gates?`), digit-only entries (`use gate names, not numbers`),
+  unknown gates (with *did you mean* suggestions), and reserved names.
+- **All** problems are reported together with their positions. A partial sequence is
+  never returned.
+
+---
+
+## Demo
+
+```
+./demo.sh          # step through, pausing between sections
+./demo.sh -q       # run straight through
+```
+
+Ten sections: the problem, generating a program, order sensitivity, repeated gates,
+both variants, input validation, forgiving input, the regression proof, the full test
+suite, and current status.
+
+---
+
+## Testing
+
+```
+/opt/anaconda3/bin/python3.13 -m pytest -q      # 147 passed
+python3 preflight.py                            # 72/72 structural checks
+```
+
+Parser tests cover each gate alone, multiple gates, repeats, reorderings, a 200-gate
+sequence, whitespace/tabs/newlines, case-insensitivity, the `NOT 1` form, that
+`NOT1, NOT2` is **not** read as `NOT12`, empty and invalid input, mixed valid/invalid
+input, error collection, determinism, and that both variants expose the same gate names.
+
+Generator tests cover header-first/footer-last exactly once, every gate block appearing
+verbatim, output order following input order, a different order producing a different
+program, repeat counts (including a 100-gate sequence), PPS and readout appearing once
+and only when requested, absence of `#ifdef`/`#endif`/`#define`, presence of the phase
+table and the `d2` line, per-variant channel mapping, CLI exit codes and the
+no-file-on-error guarantee, byte-identical output for identical input, and regression
+against both originals.
+
+### The regression test
+
+`test_regression_against_original` reconstructs the expected program by reading the
+original file, keeping only the active `#ifdef` blocks in file order, dropping the
+`;#define` and `#ifdef`/`#endif` lines, and comparing against generated output. Both
+sides are normalized only for **trailing whitespace and consecutive blank lines**.
+
+> It deliberately does **not** normalize comment spacing. An earlier version collapsed
+> every `;\s*` to `"; "`, which silently hid a gate block that had drifted from the
+> original by one space. Comment bodies are part of the verbatim pulse code; do not
+> normalize them.
+
+---
+
+## Known quirks inherited from the source programs
+
+All 24 blocks (9 gates + PPS + OBSPOP + INIT, × 2 variants) are byte-identical to the
+originals. The following oddities therefore exist **in the original repo programs** and
+are reproduced faithfully rather than silently "fixed". See `OPEN_QUESTIONS.md`.
+
+1. **Variant A `PHAD` has `pl1`/`pl2` swapped** relative to every other block in that
+   variant: `(p1 pl1 ph3):f2 (p11 pl2 ph3):f1` applies the 13C power level to the 1H
+   channel and vice versa. Pulse *lengths* are correct. This is the one quirk with a
+   likely effect on the physics (wrong flip angles). Variant B's `PHAD` is consistent.
+2. **Three comment mislabels**, text only, no effect on execution: variant A `CNOTB12`
+   and variant B `CNOTB12` / `CNOTB21` each label a 13C pulse as `(1H)`.
+3. Gradient recovery delays differ between variants (`100u` vs `1000u`/`1m`).
+4. `EQSUP` is reserved by the parser but has no block in either source file.
+
+---
+
+## Limitations
+
+- Gate blocks are concatenated with no separator, so the output has no visual marker
+  of where one gate ends and the next begins. Faithful, but harder to debug by eye.
+- No gate-level optimisation: `NOT1, NOT1` emits two 180° pulses rather than cancelling
+  to identity. Intentional — the tool is a faithful assembler, not a compiler.
+- No check that the total sequence duration is sensible relative to T2.
+- Not yet executed on a spectrometer; see `OPEN_QUESTIONS.md`.

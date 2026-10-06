@@ -1,0 +1,144 @@
+#include <Avance.incl>
+#include <Grad.incl>
+
+;#define PPS
+;#define NOT1
+;#define NOT2
+;#define NOT12
+;#define HAD
+;#define PHAD
+;#define CNOT12
+;#define CNOTB12
+;#define CNOT21
+;#define CNOTB21
+;#define OBSPOP
+;#define INIT
+
+"acqt0=-p1*2/3.1416"
+"d2=1/(4*cnst1)" ; 1/4J free evolution
+
+
+1 ze
+2 30m
+  d1
+
+#ifdef PPS
+;;----------PPS--Based on PRA 85 022109 (2012)-------------------------
+(p2 pl2 ph0):f2  ;15 deg x-pulse on 1H
+d2
+d2
+(p3 pl2 ph3):f2  ;75 deg ybar-pulse on 1H
+
+100u UNBLKGRAD ; gradient
+p31:gp2
+100u BLKGRAD
+#endif
+
+#ifdef NOT1
+(p4 pl2 ph3):f2 ;180 deg y-pulse on 1h
+#endif
+
+#ifdef NOT2
+(p14 pl1 ph1):f1 ;180 deg y-pulse on 13C
+#endif
+
+#ifdef NOT12
+(p4 pl2 ph1):f2 (p14 pl1 ph1):f1 ;180 deg y-pulse on 1h and 13C
+#endif
+
+#ifdef HAD
+(p1 pl2 ph1):f2 (p11 pl1 ph1):f1 ; 90y on 1H and 13C
+(p4 pl2 ph0):f2 (p14 pl1 ph0):f1 ; 180x on 1H and 13C
+#endif
+
+#ifdef PHAD
+(p1 pl1 ph3):f2 (p11 pl2 ph3):f1 ; 90y-bar on 1H and 13C
+#endif
+
+#ifdef CNOT12
+;cnot12 control bit 1
+; quant-ph/9801027 - Jones and Mosca (eqn 14)
+; H is spin I and C is spin S
+(p11 pl1 ph1):f1 ; 90Sy (13C)
+d2
+d2
+(p1 pl2 ph1):f2 ; 90Iy (1H)
+(p1 pl2 ph0):f2 ; 90Ix (1H)
+(p1 pl2 ph3):f2 (p11 pl1 ph3):f1 ;90Yb on spin I,S (1H, 13C)
+(p11 pl1 ph0):f1 ; 90Sx (13C)
+#endif
+
+#ifdef CNOT21
+;cnot21 with control-bit state 1
+; quant-ph/9801027 - Jones and Mosca (eqn 14)
+; H is spin I and C is spin S
+(p1 pl2 ph1):f2 ; 90Iy (1H)
+d2
+d2
+(p11 pl1 ph1):f1 ; 90Sy (13C)
+(p11 pl1 ph0):f1 ;90Sx (13C)
+(p1 pl2 ph3):f2 (p11 pl1 ph3):f1 ;90Iyb (1H) 90Syb (13C)
+(p1 pl2 ph0):f2 ; 90Ix (1H)
+#endif
+
+
+#ifdef CNOTB12 
+;cnot12 control bit 0
+; quant-ph/9801027 - Jones and Mosca (eqn 14)
+; H is spin I and C is spin S
+(p11 pl1 ph1):f1 ; 90Sy (13C)
+d2
+d2
+(p1 pl2 ph1):f2 ; 90Iy (1H)
+(p1 pl2 ph0):f2 ; 90Ix (1H)
+(p1 pl2 ph3):f2 (p11 pl1 ph3):f1 ;90Yb on spin I,S (1H, 13C)
+(p11 pl1 ph2):f1 ; 90Sx (1H)
+#endif
+
+#ifdef CNOTB21
+;cnot21 with control-bit state 0
+; quant-ph/9801027 - Jones and Mosca (eqn 14)
+; H is spin I and C is spin S
+(p1 pl2 ph1):f2 ; 90Iy (1H)
+d2
+d2
+(p11 pl1 ph1):f1 ; 90Sy (13C)
+(p11 pl1 ph0):f1 ; 90Sx (13C)
+(p1 pl2 ph3):f2 (p11 pl1 ph3):f1 ;90Yb on spin I,S (1H, 13C)
+(p1 pl2 ph2):f2 ; 90Ix (1H)
+#endif
+
+#ifdef OBSPOP
+  100u UNBLKGRAD ; gradient
+  p31:gp3
+  100u BLKGRAD
+(p11 pl1 ph1):f1 ; observation 90 pulse
+#endif
+
+#ifdef INIT
+(p11 pl1 ph1):f1 ; observation 90 pulse
+#endif
+
+
+;; Read out
+  go=2 ph31
+  30m mc #0 to 2 F0(zd)
+exit
+
+
+ph0=0
+ph1=1
+ph2 =2
+ph3 =3
+ph31=0
+
+
+
+;pl1 : f1 channel - power level for pulse (default)
+;p1 : f1 channel -  high power pulse
+;d1 : relaxation delay; 1-5 * T1
+;ns: 1 * n, total number of scans: NS * TD0
+
+
+
+;$Id:$

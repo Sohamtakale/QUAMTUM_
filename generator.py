@@ -1,0 +1,214 @@
+from __future__ import annotations
+"""
+generator.py
+------------
+Assembles Bruker NMR pulse programs from a sequence of quantum gate names.
+
+Public API
+----------
+  generate_pulse_program(gates, variant="A", prep=False, readout=None) -> str
+  write_pulse_program(text, path) -> None
+"""
+
+import argparse
+import sys
+
+from gate_library import (
+    VARIANT_A_HEADER,
+    VARIANT_A_PREP,
+    VARIANT_A_GATE_LIBRARY,
+    VARIANT_A_READOUT_PULSE,
+    VARIANT_A_FOOTER,
+    VARIANT_B_HEADER,
+    VARIANT_B_PREP,
+    VARIANT_B_GATE_LIBRARY,
+    VARIANT_B_READOUT_PULSE,
+    VARIANT_B_FOOTER,
+)
+from gate_parser import parse_gate_sequence, GateParseError
+
+# Per-variant asset lookup tables
+_VARIANTS: dict[str, dict] = {
+    "A": {
+        "header": VARIANT_A_HEADER,
+        "prep": VARIANT_A_PREP,
+        "gates": VARIANT_A_GATE_LIBRARY,
+        "readout": VARIANT_A_READOUT_PULSE,
+        "footer": VARIANT_A_FOOTER,
+    },
+    "B": {
+        "header": VARIANT_B_HEADER,
+        "prep": VARIANT_B_PREP,
+        "gates": VARIANT_B_GATE_LIBRARY,
+        "readout": VARIANT_B_READOUT_PULSE,
+        "footer": VARIANT_B_FOOTER,
+    },
+}
+
+_VALID_READOUTS = frozenset({"OBSPOP", "INIT"})
+
+
+def generate_pulse_program(
+    gates: list[str],
+    variant: str = "A",
+    prep: bool = True,
+    readout: str | None = None,
+) -> str:
+    """
+    Generate a complete Bruker NMR pulse program from a list of gate names.
+
+    Parameters
+    ----------
+    gates : list[str]
+        List of gate identifiers (e.g. ['NOT1', 'HAD', 'CNOT12']).
+    variant : str, default 'A'
+        Hardware variant ('A' or 'B', case-insensitive).
+    prep : bool, default True
+        Whether to include the PPS state-preparation block. On by default:
+        PPS is the starting point of every quantum algorithm on this system,
+        so omitting it means the circuit runs from thermal equilibrium rather
+        than a pseudo-pure state. Pass False only for pulse calibration or
+        debugging.
+    readout : str | None, default None
+        Readout pulse block ('OBSPOP' or 'INIT', case-insensitive), or None.
+
+    Returns
+    -------
+    str
+        Verbatim Bruker NMR pulse program.
+
+    Raises
+    ------
+    ValueError
+        If variant is not 'A' or 'B', gates is empty or contains unknown gates,
+        or readout is not None, 'OBSPOP', or 'INIT'.
+    """
+    # 1. Validate variant
+    if not isinstance(variant, str) or variant.strip().upper() not in _VARIANTS:
+        raise ValueError(f"Invalid variant '{variant}': must be 'A' or 'B'")
+    variant_key = variant.strip().upper()
+    v_data = _VARIANTS[variant_key]
+    gate_lib = v_data["gates"]
+    readout_lib = v_data["readout"]
+
+    # 2. Validate gates list
+    if not isinstance(gates, list) or len(gates) == 0:
+        raise ValueError("Gate sequence cannot be empty: provide at least one gate")
+
+    bad_gates = [g for g in gates if g not in gate_lib]
+    if bad_gates:
+        raise ValueError(
+            f"Unknown gate(s) for variant {variant_key}: {', '.join(bad_gates)}"
+        )
+
+    # 3. Validate readout
+    readout_block: str | None = None
+    if readout is not None:
+        if not isinstance(readout, str) or readout.strip().upper() not in _VALID_READOUTS:
+            raise ValueError(
+                f"Invalid readout '{readout}': must be None, 'OBSPOP', or 'INIT'"
+            )
+        readout_block = readout_lib[readout.strip().upper()]
+
+    # 4. Assemble the program in exact order:
+    #    HEADER -> blank line -> PREP (if prep) -> gate blocks -> READOUT (if requested) -> FOOTER
+    parts: list[str] = [v_data["header"], "\n"]
+    if prep:
+        parts.append(v_data["prep"])
+
+    for gate in gates:
+        parts.append(gate_lib[gate])
+
+    if readout_block is not None:
+        parts.append(readout_block)
+
+    parts.append(v_data["footer"])
+
+    return "".join(parts)
+
+
+def write_pulse_program(text: str, path: str) -> None:
+    """
+    Write the generated pulse program text to the specified file path.
+    """
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+
+
+def build_cli_parser() -> argparse.ArgumentParser:
+    """
+    Construct the command-line argument parser.
+    """
+    parser = argparse.ArgumentParser(
+        description="Generate Bruker NMR pulse programs from a quantum gate sequence."
+    )
+    parser.add_argument(
+        "gates",
+        help="Comma-separated gate sequence (e.g. 'NOT1, HAD, CNOT12')",
+    )
+    parser.add_argument(
+        "--variant",
+        "-v",
+        default="A",
+        help="Hardware variant: 'A' (1H on f2) or 'B' (1H on f1). Default: 'A'.",
+    )
+    # PPS is emitted by default: it is the starting point of every quantum
+    # algorithm here. --prep is retained as an explicit no-op so existing
+    # commands and scripts keep working.
+    parser.add_argument(
+        "--prep",
+        dest="prep",
+        action="store_true",
+        help="Include the PPS state-preparation block (default; kept for compatibility).",
+    )
+    parser.add_argument(
+        "--no-prep",
+        dest="prep",
+        action="store_false",
+        help="Omit the PPS block. The circuit then runs from thermal "
+             "equilibrium, not a pseudo-pure state - for calibration/debugging only.",
+    )
+    parser.set_defaults(prep=True)
+    parser.add_argument(
+        "--readout",
+        "-r",
+        default=None,
+        help="Readout pulse block: 'OBSPOP' or 'INIT' (default: None).",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        required=True,
+        help="Output file path.",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    """
+    CLI entry point. Parses args, validates sequence and options, and writes file on success.
+    """
+    parser = build_cli_parser()
+    args = parser.parse_args(argv)
+
+    try:
+        gate_list = parse_gate_sequence(args.gates)
+        program_text = generate_pulse_program(
+            gates=gate_list,
+            variant=args.variant,
+            prep=args.prep,
+            readout=args.readout,
+        )
+        write_pulse_program(program_text, args.output)
+        return 0
+    except GateParseError as e:
+        for err in e.errors:
+            print(err, file=sys.stderr)
+        return 1
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
