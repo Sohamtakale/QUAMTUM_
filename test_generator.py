@@ -37,7 +37,11 @@ from gate_library import (
     VARIANT_B_READOUT_PULSE,
     VARIANT_B_FOOTER,
 )
-from generator import generate_pulse_program
+from generator import (
+    generate_pulse_program,
+    strip_provenance,
+    PROVENANCE_MARKER,
+)
 
 ALL_GATES_A = list(VARIANT_A_GATE_LIBRARY.keys())
 ALL_GATES_B = list(VARIANT_B_GATE_LIBRARY.keys())
@@ -55,7 +59,8 @@ ALL_GATES_B = list(VARIANT_B_GATE_LIBRARY.keys())
 ])
 def test_structure_header_footer(variant: str, header: str, footer: str):
     prog = generate_pulse_program(["NOT1", "HAD"], variant=variant)
-    assert prog.startswith(header)
+    assert prog.startswith(PROVENANCE_MARKER)
+    assert strip_provenance(prog).startswith(header)
     assert prog.endswith(footer)
     assert prog.count(header) == 1
     assert prog.count(footer) == 1
@@ -163,9 +168,10 @@ def test_prep_appears_once_directly_after_header(
     prog = generate_pulse_program(seq, variant=variant, prep=True)
 
     assert prog.count(prep_block) == 1
-    # Directly after header + blank line
+    # Directly after header + blank line, within the pulse code itself
+    body = strip_provenance(prog)
     expected_offset = len(header) + len("\n")
-    assert prog.find(prep_block) == expected_offset
+    assert body.find(prep_block) == expected_offset
 
 
 def test_readout_obspop_appears_once_after_gates_before_footer():
@@ -377,6 +383,91 @@ def test_determinism():
 
 
 # ===========================================================================
+# 10b. Provenance header, and stale-output cleanup on failure
+# ===========================================================================
+
+def test_provenance_header_identifies_the_command():
+    prog = generate_pulse_program(
+        ["NOT1", "HAD", "CNOT12"], variant="B", prep=False, readout="INIT"
+    )
+    assert prog.startswith(PROVENANCE_MARKER)
+    assert ";; Gate sequence : NOT1, HAD, CNOT12" in prog
+    assert "Variant       : B" in prog
+    assert "PPS: no" in prog
+    assert "Readout: INIT" in prog
+
+
+def test_provenance_distinguishes_different_sequences():
+    """The whole point: two different commands never leave identical files."""
+    a = generate_pulse_program(["NOT1", "HAD"], variant="A")
+    b = generate_pulse_program(["HAD", "NOT1"], variant="A")
+    assert a.splitlines()[1] != b.splitlines()[1]
+
+
+def test_strip_provenance_leaves_pulse_code_untouched():
+    prog = generate_pulse_program(["NOT1", "HAD"], variant="A", readout="OBSPOP")
+    body = strip_provenance(prog)
+    assert PROVENANCE_MARKER not in body
+    assert body.startswith(VARIANT_A_HEADER)
+    # Idempotent, and a no-op on text that has no provenance block.
+    assert strip_provenance(body) == body
+
+
+def test_provenance_does_not_break_determinism():
+    a = generate_pulse_program(["NOT1", "HAD"], variant="A", readout="OBSPOP")
+    b = generate_pulse_program(["NOT1", "HAD"], variant="A", readout="OBSPOP")
+    assert a == b
+
+
+def test_cli_failure_removes_stale_output_it_wrote(tmp_path: Path):
+    """
+    A rejected input must not leave a valid-looking program behind from an
+    earlier run - that is how the wrong circuit gets loaded on the spectrometer.
+    """
+    out_file = tmp_path / "circuit.txt"
+    ok = subprocess.run(
+        [sys.executable, "generator.py", "NOT1, HAD", "-o", str(out_file)],
+        capture_output=True, text=True,
+    )
+    assert ok.returncode == 0 and out_file.exists()
+
+    bad = subprocess.run(
+        [sys.executable, "generator.py", "NOT1, BADGATE", "-o", str(out_file)],
+        capture_output=True, text=True,
+    )
+    assert bad.returncode == 1
+    assert not out_file.exists(), "stale program left behind after a failed run"
+    assert "Removed stale" in bad.stderr
+
+
+def test_cli_failure_never_deletes_a_file_it_did_not_write(tmp_path: Path):
+    """A mistyped -o must not destroy an unrelated file."""
+    victim = tmp_path / "thesis.txt"
+    content = "IMPORTANT DATA\n"
+    victim.write_text(content, encoding="utf-8")
+
+    res = subprocess.run(
+        [sys.executable, "generator.py", "NOT1, BADGATE", "-o", str(victim)],
+        capture_output=True, text=True,
+    )
+    assert res.returncode == 1
+    assert victim.read_text(encoding="utf-8") == content
+    assert "not written by this tool" in res.stderr
+
+
+def test_cli_failure_with_no_existing_file_is_quiet(tmp_path: Path):
+    out_file = tmp_path / "absent.txt"
+    res = subprocess.run(
+        [sys.executable, "generator.py", "BADGATE", "-o", str(out_file)],
+        capture_output=True, text=True,
+    )
+    assert res.returncode == 1
+    assert not out_file.exists()
+    assert "Removed stale" not in res.stderr
+    assert "not written by this tool" not in res.stderr
+
+
+# ===========================================================================
 # 11. Regression against original_variant_A.txt and original_variant_B.txt
 # ===========================================================================
 
@@ -459,7 +550,9 @@ def test_regression_against_original(variant: str, prep: bool, gates: list[str],
 
     expected_text = process_original_pulse_program(orig_path, active_macros)
     generated_text = normalize_whitespace(
-        generate_pulse_program(gates, variant=variant, prep=prep, readout=readout)
+        strip_provenance(
+            generate_pulse_program(gates, variant=variant, prep=prep, readout=readout)
+        )
     )
 
     assert generated_text == expected_text

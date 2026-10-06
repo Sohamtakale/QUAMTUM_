@@ -144,6 +144,22 @@ if [ -e "$OUT/never" ]; then
 else
     echo "    ${G}Confirmed: no output file was created by any of the above.${N}"
 fi
+echo
+echo "A failed run also clears a stale file left by an EARLIER run, so a"
+echo "rejected input can never leave a valid-looking program behind:"
+echo
+run "$PY generator.py 'NOT1, HAD' -o $OUT/circuit"
+echo "    -> wrote $(wc -l < "$OUT/circuit" | tr -d ' ') lines"
+echo "${B}\$ $PY generator.py 'NOT1, CN' -o $OUT/circuit${N}"
+"$PY" generator.py 'NOT1, CN' -o "$OUT/circuit" 2>&1 | sed 's/^/    /'
+echo "    file still present: ${G}$([ -e "$OUT/circuit" ] && echo yes || echo no)${N}"
+echo
+echo "But a file this tool did NOT write is never touched:"
+echo
+printf 'IMPORTANT DATA\n' > "$OUT/thesis.txt"
+echo "${B}\$ $PY generator.py 'NOT1, CN' -o $OUT/thesis.txt${N}"
+"$PY" generator.py 'NOT1, CN' -o "$OUT/thesis.txt" 2>&1 | sed 's/^/    /'
+echo "    contents: ${G}$(cat "$OUT/thesis.txt")${N}"
 pause
 
 # ---------------------------------------------------------------------------
@@ -183,7 +199,7 @@ pause
 step "10. Status and what is next"
 cat <<'EOF'
 Done and verified locally:
-  * 147 tests passing (69 parser, 78 generator)
+  * 154 tests passing (69 parser, 85 generator)
   * all 24 pulse blocks byte-identical to the original programs
   * 72 generated programs pass static structural checks
 
