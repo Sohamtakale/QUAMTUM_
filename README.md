@@ -7,7 +7,7 @@ You give it an ordered list of gate names; it emits a complete, ready-to-load Br
 pulse program that runs those gates in exactly that order.
 
 ```
-python3 generator.py "NOT1, HAD, CNOT12" --variant A --readout OBSPOP -o my_pulse_program
+python3 generator.py "NOT1, HAD, CNOT12" --variant A --readout OBSPOP -o my_circuit
 ```
 
 **Team:** Kanishka Patil, Soham Takale, Anish Apparaju, Ishita Kale · **Guide:** Dr. Preeti Kale
@@ -317,7 +317,6 @@ J coupling in Hz), not `d2`.
 | `original_variant_A.txt`, `original_variant_B.txt` | The unmodified repo programs; the reference for regression tests. |
 | `preflight.py` | Static structural lint over 72 generated programs. Exits non-zero on failure. **Not** a TopSpin compile. |
 | `demo.sh` | Guided walkthrough for presenting the project. |
-| `try_parser.py` | Small manual demo of parser error messages. |
 | `OPEN_QUESTIONS.md` | Decisions needed from Dr. Kale before spectrometer use. |
 
 ### Parser rules

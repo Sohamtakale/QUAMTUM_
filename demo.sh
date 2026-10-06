@@ -51,14 +51,12 @@ run() {
     eval "$@"
 }
 
-# ---------------------------------------------------------------------------
 echo
 echo "${B}Arbitrary Gate-Sequence Pulse Program Generator${N}"
 echo "Quantuper two-qubit NMR system  -  1H = qubit 1, 13C = qubit 2"
 echo "Interpreter: $PY"
 pause
 
-# ---------------------------------------------------------------------------
 step "1. The problem"
 cat <<'EOF'
 The original pulse programs are single fixed files where #define flags switch
@@ -77,7 +75,6 @@ Running a different circuit meant hand-editing the pulse program.
 EOF
 pause
 
-# ---------------------------------------------------------------------------
 step "2. Generate a program from a gate list"
 run "$PY generator.py 'NOT1, HAD, CNOT12' --variant A --readout OBSPOP -o $OUT/demo1"
 echo
@@ -88,7 +85,6 @@ echo
 awk '/^  d1$/{f=1;next} /^;; Read out$/{f=0} f' "$OUT/demo1" | sed 's/^/    /'
 pause
 
-# ---------------------------------------------------------------------------
 step "3. Order is the user's, not the file's"
 echo "Same two gates, opposite order - note which pulse block comes first."
 echo
@@ -102,7 +98,6 @@ echo
 echo "${G}The original program cannot express this difference at all.${N}"
 pause
 
-# ---------------------------------------------------------------------------
 step "4. Repeated gates"
 echo "The #ifdef scheme can emit each gate at most once. We can repeat freely:"
 echo
@@ -112,7 +107,6 @@ echo -n "    180 deg 1H pulses emitted: "
 echo "${G}$(grep -c '180 deg y-pulse on 1h' "$OUT/rep")${N}"
 pause
 
-# ---------------------------------------------------------------------------
 step "5. Both hardware variants"
 echo "The variants differ only in channel assignment."
 echo "  Variant A:  1H -> f2/pl2,  13C -> f1/pl1"
@@ -127,7 +121,6 @@ printf '    A:  %s\n' "$(grep '180 deg y-pulse on 1h' "$OUT/va")"
 printf '    B:  %s\n' "$(grep '180 deg y-pulse on 1h' "$OUT/vb")"
 pause
 
-# ---------------------------------------------------------------------------
 step "6. Input validation"
 echo "All problems are reported at once, with positions and suggestions."
 echo "Nothing is written and the exit code is 1."
@@ -162,7 +155,6 @@ echo "${B}\$ $PY generator.py 'NOT1, CN' -o $OUT/thesis.txt${N}"
 echo "    contents: ${G}$(cat "$OUT/thesis.txt")${N}"
 pause
 
-# ---------------------------------------------------------------------------
 step "7. Forgiving input"
 echo "Lowercase, spaces inside names, and one outer bracket pair are accepted."
 echo
@@ -176,7 +168,6 @@ echo "But a space is never a separator: 'NOT 1 2' is an error, not NOT12,"
 echo "because that would be ambiguous."
 pause
 
-# ---------------------------------------------------------------------------
 step "8. Regression against the original programs"
 cat <<'EOF'
 The strongest correctness claim: for any subset of gates, the generated
@@ -190,12 +181,10 @@ echo
 run "$PYTEST_PY -m pytest -q -p no:cacheprovider -p no:asyncio -k regression"
 pause
 
-# ---------------------------------------------------------------------------
 step "9. Full test suite"
 run "$PYTEST_PY -m pytest -q -p no:cacheprovider -p no:asyncio"
 pause
 
-# ---------------------------------------------------------------------------
 step "10. Status and what is next"
 cat <<'EOF'
 Done and verified locally:

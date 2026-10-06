@@ -6,7 +6,7 @@ Assembles Bruker NMR pulse programs from a sequence of quantum gate names.
 
 Public API
 ----------
-  generate_pulse_program(gates, variant="A", prep=False, readout=None) -> str
+  generate_pulse_program(gates, variant="A", prep=True, readout=None) -> str
   write_pulse_program(text, path) -> None
 """
 
@@ -125,7 +125,6 @@ def generate_pulse_program(
         If variant is not 'A' or 'B', gates is empty or contains unknown gates,
         or readout is not None, 'OBSPOP', or 'INIT'.
     """
-    # 1. Validate variant
     if not isinstance(variant, str) or variant.strip().upper() not in _VARIANTS:
         raise ValueError(f"Invalid variant '{variant}': must be 'A' or 'B'")
     variant_key = variant.strip().upper()
@@ -133,7 +132,6 @@ def generate_pulse_program(
     gate_lib = v_data["gates"]
     readout_lib = v_data["readout"]
 
-    # 2. Validate gates list
     if not isinstance(gates, list) or len(gates) == 0:
         raise ValueError("Gate sequence cannot be empty: provide at least one gate")
 
@@ -143,7 +141,6 @@ def generate_pulse_program(
             f"Unknown gate(s) for variant {variant_key}: {', '.join(bad_gates)}"
         )
 
-    # 3. Validate readout
     readout_block: str | None = None
     if readout is not None:
         if not isinstance(readout, str) or readout.strip().upper() not in _VALID_READOUTS:
@@ -152,8 +149,7 @@ def generate_pulse_program(
             )
         readout_block = readout_lib[readout.strip().upper()]
 
-    # 4. Assemble the program in exact order:
-    #    HEADER -> blank line -> PREP (if prep) -> gate blocks -> READOUT (if requested) -> FOOTER
+    # Order is fixed: provenance, HEADER, blank line, PREP, gates, READOUT, FOOTER.
     parts: list[str] = [
         _provenance_header(
             gates,

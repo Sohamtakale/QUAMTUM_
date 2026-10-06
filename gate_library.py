@@ -75,9 +75,9 @@ VARIANT_A_GATE_LIBRARY: dict[str, str] = {
 (p4 pl2 ph0):f2 (p14 pl1 ph0):f1 ; 180x on 1H and 13C
 """,
 
-    # NOTE (interpretation): pl1 appears on :f2 (1H channel in this variant)
-    # and pl2 on :f1 (13C channel). This looks like pl1/pl2 may be swapped
-    # relative to the HAD and CNOT blocks; copied verbatim from the source.
+    # Unlike every other block in this variant, pl1 is on :f2 (1H) and pl2 on
+    # :f1 (13C) - the power levels appear swapped, which would give wrong flip
+    # angles. Present in the original file; copied verbatim. See OPEN_QUESTIONS.md Q1.
     "PHAD": """\
 (p1 pl1 ph3):f2 (p11 pl2 ph3):f1 ; 90y-bar on 1H and 13C
 """,
